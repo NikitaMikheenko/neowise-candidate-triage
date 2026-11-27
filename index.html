@@ -72,7 +72,7 @@
         }
 
         const topicLabel = topicLabels.get(payload?.topic);
-        if (reply.ok && payload?.status === "ready" && topicLabel &&
+        if (reply.status === 200 && payload?.status === "ready" && topicLabel &&
             typeof payload.draft === "string" && payload.draft.trim()) {
           topic.textContent = topicLabel;
           draft.textContent = payload.draft;

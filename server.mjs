@@ -41,7 +41,7 @@ async function handleTriage(request, response) {
   return json(response, 200, { status: "ready", topic, draft });
 }
 
-createServer(async (request, response) => {
+const server = createServer(async (request, response) => {
   if (request.method === "GET" && request.url === "/") {
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     response.end(html);
@@ -55,4 +55,8 @@ createServer(async (request, response) => {
   } catch {
     json(response, 500, { status: "server_error" });
   }
-}).listen(Number(process.env.PORT || 3000), "127.0.0.1");
+});
+
+server.listen(Number(process.env.PORT || 3000), "127.0.0.1", () => {
+  process.send?.({ port: server.address().port });
+});

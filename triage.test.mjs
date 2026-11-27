@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { fork } from "node:child_process";
 import { once } from "node:events";
-import { createServer } from "node:net";
 import { after, before, test } from "node:test";
-import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 const host = "127.0.0.1";
@@ -13,36 +11,26 @@ let child;
 let baseUrl;
 
 before(async () => {
-  const portProbe = createServer();
-  const listening = once(portProbe, "listening");
-  portProbe.listen(0, host);
-  await listening;
-  const { port } = portProbe.address();
-  const closed = once(portProbe, "close");
-  portProbe.close();
-  await closed;
-
-  baseUrl = `http://${host}:${port}`;
-  child = spawn(process.execPath, [fileURLToPath(new URL("./server.mjs", import.meta.url))], {
-    env: { ...process.env, PORT: String(port) },
-    stdio: ["ignore", "ignore", "pipe"],
+  child = fork(fileURLToPath(new URL("./server.mjs", import.meta.url)), [], {
+    env: { ...process.env, PORT: "0" },
+    stdio: ["ignore", "ignore", "pipe", "ipc"],
   });
   let startupError = "";
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk) => { startupError += chunk; });
-  child.on("error", (error) => { startupError += error.message; });
 
-  const deadline = performance.now() + 3_000;
-  while (performance.now() < deadline && child.exitCode === null && !startupError) {
-    const response = await fetch(baseUrl, { signal: AbortSignal.timeout(250) }).catch(() => null);
-    if (response) {
-      await response.text();
-      assert.equal(response.status, 200);
-      return;
-    }
-    await delay(25);
-  }
-  assert.fail(`Test server did not start: ${startupError || baseUrl}`);
+  const signal = AbortSignal.timeout(3_000);
+  const [{ port }] = await Promise.race([
+    once(child, "message", { signal }),
+    once(child, "close", { signal }).then(([code]) => {
+      throw new Error(`Test server exited before listening (code ${code})\n${startupError}`);
+    }),
+  ]);
+  assert.ok(Number.isInteger(port) && port > 0, "Expected an assigned test server port");
+  baseUrl = `http://${host}:${port}`;
+  const response = await fetch(baseUrl, { signal });
+  await response.text();
+  assert.equal(response.status, 200);
 });
 
 after(async () => {
