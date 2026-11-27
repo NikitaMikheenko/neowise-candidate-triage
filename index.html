@@ -57,31 +57,35 @@
       }
       status.textContent = "Разбираем заявку…";
 
+      let responseStatus;
+      let payload;
       try {
         const reply = await fetch("/api/triage", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text }),
         });
-        const payload = await reply.json();
-        if (requestId !== latestRequest) return;
-
-        if (reply.status === 400 && payload?.status === "invalid_input") {
-          status.textContent = invalidInputMessage;
-          return;
-        }
-
-        const topicLabel = topicLabels.get(payload?.topic);
-        if (reply.status === 200 && payload?.status === "ready" && topicLabel &&
-            typeof payload.draft === "string" && payload.draft.trim()) {
-          topic.textContent = topicLabel;
-          draft.textContent = payload.draft;
-          status.textContent = "";
-          result.hidden = false;
-          return;
-        }
+        payload = await reply.json();
+        responseStatus = reply.status;
       } catch {
-        if (requestId !== latestRequest) return;
+        // Network errors and unreadable replies fall through to manual review.
+      }
+
+      if (requestId !== latestRequest) return;
+
+      if (responseStatus === 400 && payload?.status === "invalid_input") {
+        status.textContent = invalidInputMessage;
+        return;
+      }
+
+      const topicLabel = topicLabels.get(payload?.topic);
+      if (responseStatus === 200 && payload?.status === "ready" && topicLabel &&
+          typeof payload.draft === "string" && payload.draft.trim()) {
+        topic.textContent = topicLabel;
+        draft.textContent = payload.draft;
+        status.textContent = "";
+        result.hidden = false;
+        return;
       }
 
       status.textContent = manualReviewMessage;
